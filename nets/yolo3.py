@@ -28,7 +28,7 @@ class YoloBody(nn.Module):
     def __init__(self, config):
         super(YoloBody, self).__init__()
         self.config = config
-        #  backbone
+        #  backbone，从cfg改为直接init
         self.backbone = darknet53(None)
 
         out_filters = self.backbone.layers_out_filters
@@ -39,7 +39,8 @@ class YoloBody(nn.Module):
         #  embedding1
         final_out_filter1 = len(config["yolo"]["anchors"][1]) * (5 + config["yolo"]["classes"])
         self.last_layer1_conv = conv2d(512, 256, 1)
-        self.last_layer1_upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        self.last_layer1_upsample = nn.Upsample(scale_factor=2, mode='nearest') #26, 26, 256
+        #堆叠前两个
         self.last_layer1 = make_last_layers([256, 512], out_filters[-2] + 256, final_out_filter1)
 
         #  embedding2
@@ -50,14 +51,17 @@ class YoloBody(nn.Module):
 
 
     def forward(self, x):
+        #拆分last layer部分
         def _branch(last_layer, layer_in):
             for i, e in enumerate(last_layer):
                 layer_in = e(layer_in)
                 if i == 4:
+                    #五次卷积后结果保存
                     out_branch = layer_in
             return layer_in, out_branch
         #  backbone
         x2, x1, x0 = self.backbone(x)
+        # out  对应输出
         #  yolo branch 0
         out0, out0_branch = _branch(self.last_layer0, x0)
 
@@ -73,4 +77,3 @@ class YoloBody(nn.Module):
         x2_in = torch.cat([x2_in, x2], 1)
         out2, _ = _branch(self.last_layer2, x2_in)
         return out0, out1, out2
-
